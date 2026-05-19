@@ -14,6 +14,8 @@ Original project:
 
 This repository adds a Windows GUI package, service repair/recovery helpers, fan curve controls, and startup-delay handling for Lecoo Pro14 usage.
 
+The bundled service installer and uninstaller are kept aligned with the upstream 0.4.0 Windows release. Project-specific service recovery behavior is handled by `repair-service-recovery.bat` and the GUI launcher code instead of modifying the upstream installer.
+
 ### Download
 
 End users should download packaged builds from GitHub Releases:
@@ -26,9 +28,9 @@ Compiled `.exe`, `.dll`, `.7z`, and `.zip` files are release artifacts and are n
 
 - `GUI.py`: PyQt5 GUI source code.
 - `来酷pro14控制中心.spec`: PyInstaller build configuration.
-- `install.bat`: Installs the background service.
+- `install.bat`: Upstream 0.4.0 installer for the background service.
 - `repair-service-recovery.bat`: Repairs the background service auto-restart policy.
-- `uninstall.bat`: Uninstalls the background service and removes the installation directory.
+- `uninstall.bat`: Upstream 0.4.0 uninstaller for the background service.
 - `NOTICE.md`: Upstream attribution and project notice.
 
 ### Build
@@ -95,6 +97,8 @@ Third-party dependencies and binary release contents may have their own licenses
 
 本仓库在原项目基础上增加了 Windows GUI 打包、后台服务修复/恢复脚本、风扇曲线控制、开机自启延迟等内容，用于 Lecoo Pro14。
 
+服务安装和卸载脚本保持与上游 0.4.0 Windows release 一致。项目自己的服务恢复策略由 `repair-service-recovery.bat` 和 GUI 启动逻辑处理，不再改动上游安装脚本。
+
 ### 下载
 
 普通用户请从 GitHub Releases 下载打包好的版本：
@@ -107,9 +111,9 @@ https://github.com/grasscaograss/lecoo-pro14-control-center/releases
 
 - `GUI.py`：PyQt5 GUI 源码。
 - `来酷pro14控制中心.spec`：PyInstaller 打包配置。
-- `install.bat`：安装后台服务。
+- `install.bat`：上游 0.4.0 后台服务安装脚本。
 - `repair-service-recovery.bat`：修复后台服务自动重启策略。
-- `uninstall.bat`：卸载后台服务并删除安装目录。
+- `uninstall.bat`：上游 0.4.0 后台服务卸载脚本。
 - `NOTICE.md`：上游来源和项目说明。
 
 ### 构建

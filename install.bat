@@ -9,48 +9,18 @@ set "INSTALL_DIR=%ProgramFiles%\LecooControlCenter"
 set "SERVICE_NAME=LecooControlDaemon"
 set "SERVICE_DISPLAY=Lecoo EC Daemon"
 set "SERVICE_DESC=Lecoo laptop EC hardware control daemon"
-set "SERVICE_FAILURE_RESET=86400"
 set "DAEMON_EXE=lecoo-ec-daemon.exe"
 set "DAEMON_LIB=inpoutx64.dll"
 set "CTRL_EXE=lecoo-ctrl.exe"
 :: ============================================================
 
-set "HEADLESS=0"
-set "SOURCE_OVERRIDE=%LECOO_INSTALL_SOURCE%"
-:parse_args
-if "%~1"=="" goto args_done
-if /I "%~1"=="--headless" set "HEADLESS=1"
-if /I "%~1"=="/headless" set "HEADLESS=1"
-if /I "%~1"=="/silent" set "HEADLESS=1"
-if /I "%~1"=="--source" (
-    shift
-    set "NEXT_ARG=%~1"
-    if not "!NEXT_ARG!"=="" (
-        if not "!NEXT_ARG:~0,2!"=="--" (
-            if not "!NEXT_ARG:~0,1!"=="/" set "SOURCE_OVERRIDE=!NEXT_ARG!"
-        )
-    )
-)
-shift
-goto parse_args
-:args_done
-
 :: ---- Request admin rights -----------------------------------
 net session >nul 2>&1
 if !errorLevel! neq 0 (
     echo Requesting administrator privileges...
-    if "!HEADLESS!"=="1" (
-        set "LECOO_INSTALL_BAT=%~f0"
-        set "LECOO_INSTALL_SOURCE=!SOURCE_OVERRIDE!"
-        if not defined LECOO_INSTALL_SOURCE set "LECOO_INSTALL_SOURCE=%~dp0"
-        powershell -NoProfile -Command ^
-            "try { $q=[char]34; $arg='/d /c call ' + $q + $env:LECOO_INSTALL_BAT + $q + ' --headless'; $p = Start-Process -FilePath cmd.exe -ArgumentList $arg -Verb RunAs -WindowStyle Hidden -Wait -PassThru; exit $p.ExitCode } catch { exit 1 }"
-        exit /b !errorLevel!
-    ) else (
-        powershell -NoProfile -Command ^
-            "try { Start-Process -FilePath cmd.exe -ArgumentList '/c \"\"%~f0\"\"' -Verb RunAs -Wait } catch { Write-Host 'UAC cancelled or failed.'; pause }"
-        exit /b
-    )
+    powershell -NoProfile -Command ^
+        "try { Start-Process -FilePath cmd.exe -ArgumentList '/c \"\"%~f0\"\"' -Verb RunAs -Wait } catch { Write-Host 'UAC cancelled or failed.'; pause }"
+    exit /b
 )
 
 :: Safe working directory (never inside INSTALL_DIR)
@@ -58,8 +28,6 @@ cd /d "%SystemRoot%"
 
 :: Source directory = where the .bat file lives
 set "SRC=%~dp0"
-if defined SOURCE_OVERRIDE set "SRC=!SOURCE_OVERRIDE!"
-if not "!SRC:~-1!"=="\" set "SRC=!SRC!\"
 
 echo.
 echo ============================================================
@@ -204,15 +172,6 @@ if !errorLevel! neq 0 (
 sc description "%SERVICE_NAME%" "%SERVICE_DESC%" >nul 2>&1
 echo       [OK] Service registered.
 
-echo       Configuring service recovery...
-sc failure "%SERVICE_NAME%" reset= %SERVICE_FAILURE_RESET% actions= restart/5000/restart/10000/restart/30000 >nul 2>&1
-if !errorLevel! neq 0 (
-    echo       [WARN] Could not configure service recovery actions.
-) else (
-    sc failureflag "%SERVICE_NAME%" 1 >nul 2>&1
-    echo       [OK] Service will restart automatically after failures.
-)
-
 echo       Starting service...
 sc start "%SERVICE_NAME%" >nul 2>&1
 if !errorLevel! neq 0 (
@@ -268,7 +227,6 @@ echo     sc stop  %SERVICE_NAME%
 echo     sc start %SERVICE_NAME%
 echo ============================================================
 echo.
-set "EXIT_CODE=0"
 goto :done
 
 :fail
@@ -277,9 +235,8 @@ echo ============================================================
 echo   INSTALLATION FAILED - review the errors above.
 echo ============================================================
 echo.
-set "EXIT_CODE=1"
 
 :done
-if "!HEADLESS!"=="0" pause
+pause
 endlocal
-exit /b %EXIT_CODE%
+exit /b
