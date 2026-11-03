@@ -1,12 +1,11 @@
-基于上游 **0.3.3** 的 IPC 修复版，内核与通信协议保持 0.3.3。
+基于 **0.3.3** 的系统风扇服务版，保留 IPC 断连崩溃修复。
 
-- 将 `interprocess` 固定为 2.4.2，修复 Windows 客户端断开时触发 `0xc0000409`、导致整个内核退出的问题。
-- 保留原 GUI、风扇曲线逻辑、充电限制和开机自启行为。
-- 恢复 0.3.3 配套的安装脚本。
-- Windows Release 回归通过：192 次断连场景、256 轮正常收发。
+- 新增原生 Windows 服务 `LecooFanControl`，以 LocalSystem 身份随开机运行，无需登录。
+- 直接执行已保存的曲线、升降速延迟和手动风扇配置；退出 GUI 或注销用户后继续调速。
+- GUI 改为配置与状态界面，避免与系统服务同时下发风扇指令。
+- 保留最近一次有效配置；温度无效时恢复固件自动控扇，CPU 达到 95°C 时立即请求满速。
+- 安装、卸载与构建流程同步更新；内核和 IPC 仍为 0.3.3。
 
-退出旧版托盘程序，解压完整新包，以管理员身份运行 `install.bat`，再启动 GUI。配置保存在用户目录中；更换程序目录后请重新设置开机自启。
+升级前退出旧托盘程序，解压完整新包，以管理员身份运行 `install.bat`。保留原配置与风扇曲线。“登录后自动打开到托盘”只控制 GUI，不影响开机调速。
 
-附件中的 `SHA256SUMS.txt` 用于核对下载包。完整安装与构建说明见 [README](https://github.com/grasscaograss/lecoo-pro14-control-center#readme)。
-
-上游问题与修复：[interprocess #93](https://github.com/kotauskas/interprocess/issues/93)、[aa9dedc](https://github.com/kotauskas/interprocess/commit/aa9dedca30d87699e020a1e7177acb200aaf0b3e)。
+源码构建和 Windows 回归测试通过。附件 `SHA256SUMS.txt` 用于校验安装包；组件来源见包内 `version.json`。

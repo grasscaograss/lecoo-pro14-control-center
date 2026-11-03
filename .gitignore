@@ -4,6 +4,7 @@ __pycache__/
 build/
 dist/
 logs/
+fan-service/target/
 
 config.json
 !/release/config.json

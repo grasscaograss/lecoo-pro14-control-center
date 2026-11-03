@@ -615,6 +615,13 @@ def is_autostart_enabled():
         logger.exception("读取开机自启状态失败")
         return False
 
+def is_fan_service_installed():
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Services\LecooFanControl"):
+            return True
+    except FileNotFoundError:
+        return False
+
 def migrate_config_if_needed():
     if os.path.exists(CONFIG_PATH):
         return
@@ -993,6 +1000,9 @@ class IpcCommandThread(QThread):
         try:
             with IpcClient() as client:
                 def execute(action, params):
+                    if action in ("set_fan", "set_fans") and is_fan_service_installed():
+                        logger.info("风扇设置由系统服务从配置文件应用")
+                        return True
                     if action == "set_fan":
                         return client.set_fan_mode(
                             params["fan"],
@@ -1572,14 +1582,17 @@ class LecooControlGUI(QMainWindow):
         led_group.setLayout(led_layout)
         main_layout.addWidget(led_group)
 
-        startup_group = QGroupBox("开机自启")
+        startup_group = QGroupBox("界面自启")
         startup_layout = QHBoxLayout()
-        self.startup_checkbox = QCheckBox("开机自动启动")
+        self.startup_checkbox = QCheckBox("登录后自动打开到托盘")
         self.startup_checkbox.stateChanged.connect(self.toggle_autostart)
         startup_layout.addWidget(self.startup_checkbox)
         startup_layout.addStretch()
         startup_group.setLayout(startup_layout)
         main_layout.addWidget(startup_group)
+        service_hint = QLabel("风扇系统服务随开机运行，无需登录或保持此界面打开。")
+        service_hint.setWordWrap(True)
+        main_layout.addWidget(service_hint)
 
     def on_fan_mode_change(self):
         self.cpu_fan_slider.setEnabled(self.cpu_fan_mode.currentText() == "自定义")
@@ -1831,6 +1844,10 @@ class LecooControlGUI(QMainWindow):
         self.cpu_temp_value.setText(f"{cpu_temp_str} °C" if cpu_temp_str not in ("获取失败", "--") else cpu_temp_str)
         self.sys_temp_value.setText(f"{sys_temp_str} °C" if sys_temp_str not in ("获取失败", "--") else sys_temp_str)
 
+        if is_fan_service_installed():
+            self.reset_curve_pending()
+            return
+
         if not self.curve_enabled.isChecked() or not cpu_temp_str.isdigit():
             self.reset_curve_pending()
             return
@@ -1942,8 +1959,10 @@ class LecooControlGUI(QMainWindow):
         }
         try:
             ensure_app_data_dir()
-            with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+            temporary_path = CONFIG_PATH + ".tmp"
+            with open(temporary_path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=4, ensure_ascii=False)
+            os.replace(temporary_path, CONFIG_PATH)
         except Exception as e:
             logger.exception("保存配置失败: %s", CONFIG_PATH)
 

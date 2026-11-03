@@ -27,6 +27,9 @@ echo ============================================================
 echo.
 
 echo [1/4] Stopping service...
+sc stop LecooFanControl >nul 2>&1
+powershell -NoProfile -Command "$s=Get-Service LecooFanControl -ErrorAction SilentlyContinue; if($s){$s.WaitForStatus('Stopped',[TimeSpan]::FromSeconds(15))}" >nul 2>&1
+sc delete LecooFanControl >nul 2>&1
 sc query "%SERVICE_NAME%" >nul 2>&1
 if !errorLevel! neq 0 (
     echo       [OK] Service not found.

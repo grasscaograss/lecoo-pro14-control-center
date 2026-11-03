@@ -95,6 +95,8 @@ echo.
 
 :: ---- Step 2: Stop existing service if present ----------------
 echo [2/7] Checking for existing service...
+sc stop LecooFanControl >nul 2>&1
+powershell -NoProfile -Command "$s=Get-Service LecooFanControl -ErrorAction SilentlyContinue; if($s){$s.WaitForStatus('Stopped',[TimeSpan]::FromSeconds(15))}" >nul 2>&1
 sc query "%SERVICE_NAME%" >nul 2>&1
 if !errorLevel! neq 0 (
     echo       [OK] No existing service found. Fresh install.
@@ -235,6 +237,10 @@ if !errorLevel! neq 0 (
 echo.
 
 :: ---- Step 7: Add to system PATH -----------------------------
+echo       Installing system fan control...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SRC%install-fan-service.ps1" -SourceDirectory "%SRC%." -ConfigPath "%LOCALAPPDATA%\LecooControlCenter\config.json"
+if !errorLevel! neq 0 goto :fail
+
 echo [7/7] Adding install directory to system PATH...
 echo "%PATH%" | find /I "%INSTALL_DIR%" >nul 2>&1
 if !errorLevel! equ 0 (

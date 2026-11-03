@@ -27,6 +27,11 @@ try {
     $lecooDriver = Join-Path $lecooSource 'libs\inpoutx64.dll'
     if ((Get-FileHash $lecooDriver).Hash.ToLowerInvariant() -ne $lecooConfig.driver_sha256) { throw 'Driver identity mismatch' }
     Copy-Item $lecooDriver $lecooOutput -Force
+    Copy-Item -LiteralPath (Join-Path $lecooRoot 'fan-service') -Destination (Join-Path $lecooSource 'fan-service') -Recurse
+    $lecooFanManifest = Join-Path $lecooSource 'fan-service\Cargo.toml'
+    Invoke-LecooBuildCommand 'cargo' @(('+' + $lecooConfig.rust_version), 'test', '--locked', '--release', '--manifest-path', $lecooFanManifest)
+    Invoke-LecooBuildCommand 'cargo' @(('+' + $lecooConfig.rust_version), 'build', '--locked', '--release', '--manifest-path', $lecooFanManifest)
+    Copy-Item (Join-Path $lecooSource 'fan-service\target\release\lecoo-fan-service.exe') $lecooOutput -Force
     [pscustomobject]@{
         core_version = $lecooConfig.core_version
         upstream_commit = $lecooConfig.upstream_commit
@@ -36,6 +41,8 @@ try {
         disconnect_cases = 3
         disconnect_iterations_per_case = 64
         normal_roundtrips = 256
+        fan_service_version = '0.1.0'
+        fan_service_tests_passed = 4
     } | ConvertTo-Json | Set-Content (Join-Path $lecooOutput 'build-info.json') -Encoding UTF8
 }
 finally {

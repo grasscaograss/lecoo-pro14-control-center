@@ -6,7 +6,6 @@ import json
 import os
 from pathlib import Path
 import shutil
-import subprocess
 import tempfile
 import urllib.error
 import urllib.parse
@@ -68,42 +67,7 @@ def asset_bytes(asset):
     return request("GET", asset["url"], accept="application/octet-stream")
 
 
-def download_bootstrap(directory):
-    current = release_for(CONFIG["tag"])
-    asset = next((a for a in (current or {}).get("assets", []) if a["name"] == CONFIG["archive"]), None)
-    if asset:
-        path = directory / CONFIG["archive"]
-    else:
-        previous = release_for(CONFIG["bootstrap"]["tag"])
-        if not previous:
-            raise RuntimeError("No verified GUI bootstrap release is available")
-        asset = next(a for a in previous["assets"] if a["name"] == CONFIG["bootstrap"]["asset"])
-        path = directory / CONFIG["bootstrap"]["asset"]
-    path.write_bytes(asset_bytes(asset))
-    if path.suffix == ".7z" and sha256(path) != CONFIG["bootstrap"]["sha256"]:
-        raise RuntimeError("Bootstrap archive checksum mismatch")
-    return path
-
-
-def extract_gui(archive, destination):
-    if archive.suffix == ".zip":
-        with zipfile.ZipFile(archive) as zipped:
-            matches = [name for name in zipped.namelist() if Path(name).name == GUI]
-            if len(matches) != 1:
-                raise RuntimeError("Expected exactly one GUI executable")
-            destination.write_bytes(zipped.read(matches[0]))
-    else:
-        if sha256(archive) != CONFIG["bootstrap"]["sha256"]:
-            raise RuntimeError("Bootstrap archive checksum mismatch")
-        seven_zip = shutil.which("7z") or shutil.which("7zz")
-        command = [seven_zip, "e", "-so", "--", str(archive), GUI] if seven_zip else ["tar", "-xOf", str(archive), GUI]
-        with destination.open("wb") as output:
-            subprocess.run(command, stdout=output, check=True)
-    if sha256(destination) != CONFIG["gui_sha256"]:
-        raise RuntimeError("GUI executable differs from the verified current GUI")
-
-
-def package(runtime, output, bootstrap=None):
+def package(runtime, output):
     runtime, output = Path(runtime), Path(output)
     output.mkdir(parents=True, exist_ok=True)
     build = json.loads((runtime / "build-info.json").read_text(encoding="utf-8-sig"))
@@ -115,21 +79,25 @@ def package(runtime, output, bootstrap=None):
     if sha256(runtime / "inpoutx64.dll") != CONFIG["driver_sha256"]:
         raise RuntimeError("Driver checksum mismatch")
 
+    if build.get("fan_service_version") != CONFIG["fan_service_version"] or build.get("fan_service_tests_passed") != 4:
+        raise RuntimeError("System fan service checks did not pass")
+    gui_build = json.loads((runtime / "gui-build-info.json").read_text(encoding="utf-8-sig"))
+    if gui_build["source_sha256"] != sha256(ROOT / "GUI.py") or gui_build["binary_sha256"] != sha256(runtime / GUI):
+        raise RuntimeError("GUI build does not match the current source")
+
     with tempfile.TemporaryDirectory(prefix="lecoo-package-") as temporary:
         staging = Path(temporary)
-        archive = Path(bootstrap) if bootstrap else download_bootstrap(staging)
-        extract_gui(archive, staging / GUI)
-        for name in ["lecoo-ec-daemon.exe", "lecoo-ctrl.exe", "inpoutx64.dll"]:
+        for name in [GUI, "lecoo-ec-daemon.exe", "lecoo-ctrl.exe", "lecoo-fan-service.exe", "inpoutx64.dll"]:
             shutil.copy2(runtime / name, staging / name)
-        for name in ["README.md", "NOTICE.md", "LICENSE", "logo.png", "install.bat", "uninstall.bat", "repair-service-recovery.bat"]:
+        for name in ["README.md", "NOTICE.md", "LICENSE", "logo.png", "install.bat", "install-fan-service.ps1", "uninstall.bat", "repair-service-recovery.bat"]:
             shutil.copy2(ROOT / name, staging / name)
-        manifest = {"release": CONFIG["tag"], "source_commit": os.environ.get("GITHUB_SHA"), "runtime": build,
-                    "sha256": {p.name: sha256(p) for p in staging.iterdir() if p.is_file() and p != archive}}
+        manifest = {"release": CONFIG["tag"], "source_commit": os.environ.get("GITHUB_SHA"), "runtime": build, "gui_build": gui_build,
+                    "sha256": {p.name: sha256(p) for p in staging.iterdir() if p.is_file()}}
         (staging / "version.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         package_path = output / CONFIG["archive"]
         with zipfile.ZipFile(package_path, "w", zipfile.ZIP_DEFLATED) as zipped:
             for path in sorted(staging.iterdir()):
-                if path.is_file() and path != archive:
+                if path.is_file():
                     zipped.write(path, path.name)
             if zipped.testzip() is not None:
                 raise RuntimeError("Package ZIP verification failed")
@@ -208,11 +176,10 @@ if __name__ == "__main__":
     parser.add_argument("command", choices=["package", "publish"])
     parser.add_argument("--output", required=True)
     parser.add_argument("--runtime")
-    parser.add_argument("--bootstrap-archive")
     args = parser.parse_args()
     if args.command == "package":
         if not args.runtime:
             parser.error("package requires --runtime")
-        package(args.runtime, args.output, args.bootstrap_archive)
+        package(args.runtime, args.output)
     else:
         publish(args.output)

@@ -4,8 +4,8 @@
 a = Analysis(
     ['GUI.py'],
     pathex=[],
-    binaries=[('lecoo-ec-daemon.exe', '.'), ('lecoo-ctrl.exe', '.'), ('inpoutx64.dll', '.')],
-    datas=[('install.bat', '.'), ('repair-service-recovery.bat', '.'), ('logo.png', '.')],
+    binaries=[('lecoo-ec-daemon.exe', '.'), ('lecoo-ctrl.exe', '.'), ('lecoo-fan-service.exe', '.'), ('inpoutx64.dll', '.')],
+    datas=[('install.bat', '.'), ('install-fan-service.ps1', '.'), ('repair-service-recovery.bat', '.'), ('logo.png', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
