@@ -95,8 +95,10 @@ def extract_gui(archive, destination):
     else:
         if sha256(archive) != CONFIG["bootstrap"]["sha256"]:
             raise RuntimeError("Bootstrap archive checksum mismatch")
+        seven_zip = shutil.which("7z") or shutil.which("7zz")
+        command = [seven_zip, "e", "-so", "--", str(archive), GUI] if seven_zip else ["tar", "-xOf", str(archive), GUI]
         with destination.open("wb") as output:
-            subprocess.run(["tar", "-xOf", str(archive), GUI], stdout=output, check=True)
+            subprocess.run(command, stdout=output, check=True)
     if sha256(destination) != CONFIG["gui_sha256"]:
         raise RuntimeError("GUI executable differs from the verified current GUI")
 
