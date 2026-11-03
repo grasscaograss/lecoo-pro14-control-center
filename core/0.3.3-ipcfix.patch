@@ -1,0 +1,184 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 2a64f42..3213afb 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -696,15 +696,15 @@ dependencies = [
+ 
+ [[package]]
+ name = "interprocess"
+-version = "2.4.0"
++version = "2.4.2"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "6be5e5c847dbdb44564bd85294740d031f4f8aeb3464e5375ef7141f7538db69"
++checksum = "069323743400cb7ab06a8fe5c1ed911d36b6919ec531661d034c89083629595b"
+ dependencies = [
+  "doctest-file",
+  "libc",
+  "recvmsg",
+  "widestring",
+- "windows-sys 0.52.0",
++ "windows-sys 0.61.2",
+ ]
+ 
+ [[package]]
+diff --git a/ipc/Cargo.toml b/ipc/Cargo.toml
+index dbb1968..fd261c2 100644
+--- a/ipc/Cargo.toml
++++ b/ipc/Cargo.toml
+@@ -9,7 +9,8 @@ edition = "2024"
+ 
+ [dependencies]
+ bincode = "2.0"
+-interprocess = "2.4"
++# 2.4.0 aborts on Windows when a peer disconnects before the next pipe read.
++interprocess = "=2.4.2"
+ 
+ [target.'cfg(windows)'.dependencies]
+ widestring = "1.0"
+diff --git a/ipc/tests/windows_disconnect.rs b/ipc/tests/windows_disconnect.rs
+new file mode 100644
+index 0000000..672873f
+--- /dev/null
++++ b/ipc/tests/windows_disconnect.rs
+@@ -0,0 +1,141 @@
++#![cfg(windows)]
++
++use interprocess::local_socket::{GenericNamespaced, ListenerOptions, Stream, prelude::*};
++use std::{
++    env,
++    io::{self, Read, Write},
++    process::{Command, Stdio},
++    sync::mpsc,
++    thread,
++    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
++};
++
++const CHILD_CASE: &str = "LECOO_PIPE_REGRESSION_CASE";
++
++fn socket_name(case: &str, iteration: usize) -> String {
++    format!(
++        "lecoo-033-regression-{}-{case}-{iteration}-{}",
++        std::process::id(),
++        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
++    )
++}
++
++fn disconnect_case(case: &str) -> io::Result<()> {
++    for iteration in 0..64 {
++        let path = socket_name(case, iteration);
++        let listener = ListenerOptions::new()
++            .name(path.as_str().to_ns_name::<GenericNamespaced>()?)
++            .create_sync()?;
++        let (closed_tx, closed_rx) = mpsc::sync_channel(0);
++        let (accepted_tx, accepted_rx) = mpsc::sync_channel(0);
++        let send_data = case == "read-after-data";
++        let client = thread::spawn(move || -> io::Result<()> {
++            let mut stream = Stream::connect(path.as_str().to_ns_name::<GenericNamespaced>()?)?;
++            accepted_rx.recv().unwrap();
++            if send_data {
++                stream.write_all(b"x")?;
++                stream.flush()?;
++            }
++            drop(stream);
++            closed_tx.send(()).unwrap();
++            Ok(())
++        });
++
++        let mut stream = listener.accept()?;
++        accepted_tx.send(()).unwrap();
++        if case == "read-after-data" {
++            let mut byte = [0];
++            stream.read_exact(&mut byte)?;
++            assert_eq!(byte, *b"x");
++        }
++        closed_rx.recv().unwrap();
++        client.join().unwrap()?;
++
++        if case == "write-after-close" {
++            assert!(stream.write_all(b"reply").is_err());
++        } else {
++            let result = stream.read(&mut [0]);
++            assert!(
++                matches!(result, Ok(0))
++                    || matches!(result, Err(ref error) if matches!(
++                        error.kind(),
++                        io::ErrorKind::BrokenPipe | io::ErrorKind::ConnectionReset
++                    )),
++                "unexpected disconnect result: {result:?}"
++            );
++        }
++    }
++    Ok(())
++}
++
++#[test]
++fn disconnected_peers_do_not_abort_the_process() {
++    if let Ok(case) = env::var(CHILD_CASE) {
++        disconnect_case(&case).unwrap();
++        return;
++    }
++
++    // A regression aborts the entire child, which ordinary catch_unwind cannot catch.
++    let mut failures = Vec::new();
++    for case in ["read-after-close", "read-after-data", "write-after-close"] {
++        let mut child = Command::new(env::current_exe().unwrap())
++            .args([
++                "--exact",
++                "disconnected_peers_do_not_abort_the_process",
++                "--nocapture",
++            ])
++            .env(CHILD_CASE, case)
++            .stdout(Stdio::piped())
++            .stderr(Stdio::piped())
++            .spawn()
++            .unwrap();
++        let deadline = Instant::now() + Duration::from_secs(30);
++        while child.try_wait().unwrap().is_none() {
++            if Instant::now() >= deadline {
++                child.kill().unwrap();
++                failures.push(format!("{case}: child exceeded 30 seconds"));
++                break;
++            }
++            thread::sleep(Duration::from_millis(10));
++        }
++        let result = child.wait_with_output().unwrap();
++        if !result.status.success() {
++            failures.push(format!(
++                "{case}: exit={:?}, stdout={}, stderr={}",
++                result.status.code(),
++                String::from_utf8_lossy(&result.stdout),
++                String::from_utf8_lossy(&result.stderr)
++            ));
++        }
++    }
++    assert!(failures.is_empty(), "{}", failures.join("\n"));
++}
++
++#[test]
++fn repeated_connections_preserve_request_and_reply_bytes() -> io::Result<()> {
++    let path = socket_name("roundtrip", 0);
++    let listener = ListenerOptions::new()
++        .name(path.as_str().to_ns_name::<GenericNamespaced>()?)
++        .create_sync()?;
++    let client = thread::spawn(move || -> io::Result<()> {
++        for sequence in 0u32..256 {
++            let mut stream = Stream::connect(path.as_str().to_ns_name::<GenericNamespaced>()?)?;
++            stream.write_all(&sequence.to_le_bytes())?;
++            stream.flush()?;
++            let mut reply = [0; 4];
++            stream.read_exact(&mut reply)?;
++            assert_eq!(u32::from_le_bytes(reply), sequence + 1);
++        }
++        Ok(())
++    });
++    for expected in 0u32..256 {
++        let mut stream = listener.accept()?;
++        let mut request = [0; 4];
++        stream.read_exact(&mut request)?;
++        assert_eq!(u32::from_le_bytes(request), expected);
++        stream.write_all(&(expected + 1).to_le_bytes())?;
++        stream.flush()?;
++    }
++    client.join().unwrap()?;
++    Ok(())
++}

@@ -1,167 +1,90 @@
 # Lecoo Pro14 Control Center
 
+来酷 Pro14 Windows 控制中心：自定义风扇曲线、性能档位、充电限制、灯光和开机自启。
+
+## 当前版本
+
+**[下载 0.3.3 IPC 修复版](https://github.com/grasscaograss/lecoo-pro14-control-center/releases/latest)**
+
+| 组件 | 基线 |
+| --- | --- |
+| EC 内核与 IPC 协议 | 0.3.3 |
+| `interprocess` | 固定为 2.4.2 |
+| GUI | 保留现用版本及风扇曲线逻辑 |
+| Rust 构建工具链 | 1.94.0 |
+
+本版修复客户端断开连接时内核以 `0xc0000409` 退出的问题。根因及上游修复见 [interprocess #93](https://github.com/kotauskas/interprocess/issues/93) 和 [aa9dedc](https://github.com/kotauskas/interprocess/commit/aa9dedca30d87699e020a1e7177acb200aaf0b3e)。
+
+Windows Release 回归覆盖 192 次断连场景和 256 轮正常收发。现用设备已完成内核替换、GUI 重连和温度/风扇读取检查；长期运行仍需持续验证。
+
+## 安装与更新
+
+1. 从 Releases 下载完整 ZIP，并用 `SHA256SUMS.txt` 核对校验值。
+2. 更新前先退出旧版托盘程序，再解压完整新包。
+3. 右键 `install.bat`，选择“以管理员身份运行”。
+4. 运行 `来酷pro14控制中心.exe`。首次安装或服务异常时，按提示允许管理员修复。
+5. 如果更换了程序目录，重新设置“开机自启”。自启会在登录后延迟 10 秒运行。
+
+保持包内文件放在同一目录；内核、CLI 和 DLL 使用本仓库整包中的配套版本。安装程序保留用户配置和内核状态。
+
+```powershell
+Get-FileHash .\lecoo-pro14-control-center-0.3.3-ipcfix.1-windows-x64.zip -Algorithm SHA256
+```
+
+## 风扇曲线与配置
+
+- 在主界面点击“打开风扇曲线设置”，启用自定义曲线并调整温度/转速点。
+- “升速延迟”和“降速延迟”分别控制持续升温、降温后的响应等待时间。
+- 自定义曲线由 GUI 执行。需要持续动态调速时，将程序最小化到托盘；退出 GUI 后，内核保留最后下发的风扇设置。
+
+| 内容 | 路径 |
+| --- | --- |
+| GUI 配置 | `%LOCALAPPDATA%\LecooControlCenter\config.json` |
+| GUI、安装和修复日志 | `%LOCALAPPDATA%\LecooControlCenter\logs` |
+| 内核状态和日志 | `%PROGRAMDATA%\LecooControl` |
+
+`repair-service-recovery.bat` 用于修复后台服务自动重启策略；`uninstall.bat` 用于卸载服务。
+
+## 源码与构建
+
+本项目基于 [LaVashikk/Lecoo-Control-Center](https://github.com/LaVashikk/Lecoo-Control-Center)，保留原项目的 MIT 许可证与署名。
+
+| 文件 | 用途 |
+| --- | --- |
+| `GUI.py`、`来酷pro14控制中心.spec` | PyQt5 GUI 与 PyInstaller 打包配置 |
+| `core/0.3.3-ipcfix.patch` | 0.3.3 内核依赖补丁及 Windows 断连回归测试 |
+| `scripts/build-core.ps1` | 拉取固定上游提交，应用补丁，测试并构建内核/CLI |
+| `scripts/release.py`、`release/config.json` | 校验、打包及 GitHub Release API 发布 |
+| `.github/workflows/release.yml` | Windows 构建、回归测试和发布流程 |
+
+在 Windows x64 上安装 Git、Visual Studio C++ Build Tools 和 Rust 后执行：
+
+```powershell
+rustup toolchain install 1.94.0 --profile minimal
+.\scripts\build-core.ps1
+```
+
+脚本固定上游提交 `dd850af1f15110deed00b9e3b7546b5fa8b3ea41`，使用锁文件构建。产物位于 `dist/runtime/`，内核版本仍为 0.3.3。
+
+需要自行重建 GUI 时，将上述内核、CLI 和 DLL 放在 `GUI.py` 同级目录，再执行：
+
+```powershell
+python -m pip install -r requirements.txt
+python -m PyInstaller --clean -y "来酷pro14控制中心.spec"
+```
+
+正式发布沿用已校验的 GUI 二进制，仅重建修复后的内核和 CLI；每个安装包包含 `version.json`，记录来源、构建版本和组件哈希。二进制与完整 ZIP 通过 Releases 分发，不提交到 Git 源码中。
+
 ## English
 
-### About
+Windows control center for Lecoo Pro14, based on [LaVashikk/Lecoo-Control-Center](https://github.com/LaVashikk/Lecoo-Control-Center).
 
-This project is based on [LaVashikk/Lecoo-Control-Center](https://github.com/LaVashikk/Lecoo-Control-Center).
+The current release keeps the **0.3.3 core and IPC protocol**, pins `interprocess` to **2.4.2**, and fixes process aborts when a Windows pipe client disconnects. The existing GUI and fan curve behavior are retained. Windows Release tests cover 192 disconnect scenarios and 256 normal request/reply cycles.
 
-Original project:
+Download the complete ZIP from [Releases](https://github.com/grasscaograss/lecoo-pro14-control-center/releases/latest), verify `SHA256SUMS.txt`, exit the old tray app, and run `install.bat` as administrator before opening the GUI. Keep all package files together. If its directory changes, reconfigure auto-start. User settings are preserved.
 
-- Author: LaVashikk
-- Repository: https://github.com/LaVashikk/Lecoo-Control-Center
-- License: MIT
+Custom fan curves run in the GUI: keep it in the tray for continuous control. Exiting the GUI leaves the last fan setting active in the core. Settings and GUI logs are under `%LOCALAPPDATA%\LecooControlCenter`; core state and logs are under `%PROGRAMDATA%\LecooControl`.
 
-This repository adds a Windows GUI package, service repair/recovery helpers, fan curve controls, and startup-delay handling for Lecoo Pro14 usage.
+To build the runtime, install Rust 1.94.0 and the Windows C++ tools, then run `scripts/build-core.ps1`. The script checks out the pinned 0.3.3 source, applies the patch, runs the Windows regression tests, and builds the runtime under `dist/runtime/`. Release publishing uses GitHub Actions and the GitHub REST API.
 
-The bundled service installer and uninstaller are kept aligned with the upstream 0.4.0 Windows release. Project-specific service recovery behavior is handled by `repair-service-recovery.bat` and the GUI launcher code instead of modifying the upstream installer.
-
-### Download
-
-End users should download packaged builds from GitHub Releases:
-
-https://github.com/grasscaograss/lecoo-pro14-control-center/releases
-
-Compiled `.exe`, `.dll`, `.7z`, and `.zip` files are release artifacts and are not tracked in the source repository.
-
-### Source Layout
-
-- `GUI.py`: PyQt5 GUI source code.
-- `来酷pro14控制中心.spec`: PyInstaller build configuration.
-- `install.bat`: Upstream 0.4.0 installer for the background service.
-- `repair-service-recovery.bat`: Repairs the background service auto-restart policy.
-- `uninstall.bat`: Upstream 0.4.0 uninstaller for the background service.
-- `NOTICE.md`: Upstream attribution and project notice.
-
-### Build
-
-Install Python dependencies:
-
-```powershell
-python -m pip install -r requirements.txt
-```
-
-Before building the full packaged app, place these runtime files next to `GUI.py`:
-
-- `lecoo-ec-daemon.exe`
-- `lecoo-ctrl.exe`
-- `inpoutx64.dll`
-
-They are not tracked in this source repository. Use the upstream build outputs or copy them from a release package.
-
-Build the Windows executable:
-
-```powershell
-python -m PyInstaller --clean -y "来酷pro14控制中心.spec"
-```
-
-The packaged executable is generated under `dist/`.
-
-### Usage
-
-1. Download the latest release package.
-2. Keep all files in the package folder together. Do not copy only the `.bat` scripts by themselves.
-3. Double-click `来酷pro14控制中心.exe` to start the app.
-4. On first launch, or when the background service is abnormal, Windows may show an administrator permission prompt. Choose **Yes**.
-5. Auto-start waits 10 seconds after login before launching, so Windows desktop scaling and DPI state can settle first.
-
-### Fan Curve
-
-- Click **打开风扇曲线设置** in the main window.
-- **升速延迟** controls how long the app waits before increasing fan speed after temperature rises.
-- **降速延迟** controls how long the app waits before decreasing fan speed after temperature drops.
-
-### Logs
-
-```text
-%LOCALAPPDATA%\LecooControlCenter\logs
-```
-
-### License
-
-This project keeps the original MIT license notice from LaVashikk/Lecoo-Control-Center and includes copyright information for local modifications.
-
-Third-party dependencies and binary release contents may have their own licenses.
-
-## 中文
-
-### 项目说明
-
-本项目基于 [LaVashikk/Lecoo-Control-Center](https://github.com/LaVashikk/Lecoo-Control-Center) 开发。
-
-原项目信息：
-
-- 作者：LaVashikk
-- 仓库：https://github.com/LaVashikk/Lecoo-Control-Center
-- 许可证：MIT
-
-本仓库在原项目基础上增加了 Windows GUI 打包、后台服务修复/恢复脚本、风扇曲线控制、开机自启延迟等内容，用于 Lecoo Pro14。
-
-服务安装和卸载脚本保持与上游 0.4.0 Windows release 一致。项目自己的服务恢复策略由 `repair-service-recovery.bat` 和 GUI 启动逻辑处理，不再改动上游安装脚本。
-
-### 下载
-
-普通用户请从 GitHub Releases 下载打包好的版本：
-
-https://github.com/grasscaograss/lecoo-pro14-control-center/releases
-
-编译后的 `.exe`、`.dll`、`.7z`、`.zip` 属于发布产物，不放在源码仓库里。
-
-### 源码结构
-
-- `GUI.py`：PyQt5 GUI 源码。
-- `来酷pro14控制中心.spec`：PyInstaller 打包配置。
-- `install.bat`：上游 0.4.0 后台服务安装脚本。
-- `repair-service-recovery.bat`：修复后台服务自动重启策略。
-- `uninstall.bat`：上游 0.4.0 后台服务卸载脚本。
-- `NOTICE.md`：上游来源和项目说明。
-
-### 构建
-
-安装 Python 依赖：
-
-```powershell
-python -m pip install -r requirements.txt
-```
-
-完整打包前，需要把下面这些运行时文件放到 `GUI.py` 同级目录：
-
-- `lecoo-ec-daemon.exe`
-- `lecoo-ctrl.exe`
-- `inpoutx64.dll`
-
-这些文件不放在源码仓库中。可以使用上游构建产物，或者从 Release 包里复制。
-
-构建 Windows 可执行文件：
-
-```powershell
-python -m PyInstaller --clean -y "来酷pro14控制中心.spec"
-```
-
-打包后的可执行文件会生成在 `dist/` 目录。
-
-### 使用
-
-1. 下载最新 Release 包。
-2. 保持包内文件放在一起，不要只单独拷贝 `.bat` 脚本。
-3. 双击运行 `来酷pro14控制中心.exe`。
-4. 首次运行或后台服务异常时，Windows 可能会弹出管理员授权，请选择 **是**。
-5. 开机自启会延迟 10 秒启动，用于等待 Windows 桌面缩放和 DPI 状态稳定。
-
-### 风扇曲线
-
-- 在主界面点击 **打开风扇曲线设置**。
-- **升速延迟** 控制温度升高后等待多久再提高风扇转速。
-- **降速延迟** 控制温度降低后等待多久再降低风扇转速。
-
-### 日志位置
-
-```text
-%LOCALAPPDATA%\LecooControlCenter\logs
-```
-
-### 许可证
-
-本项目保留 LaVashikk/Lecoo-Control-Center 原项目的 MIT 许可证声明，并补充本地修改部分的版权信息。
-
-第三方依赖和 Release 包内的二进制内容可能有各自的许可证。
+The original MIT license is retained. Third-party runtime dependencies have their own licenses; see `NOTICE.md`.

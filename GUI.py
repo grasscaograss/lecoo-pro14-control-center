@@ -772,25 +772,12 @@ def ensure_service_recovery_configured():
     logger.warning("后台服务需要管理员修复: state=%s recovery_configured=%s", state, recovery_configured)
     return run_service_recovery_repair_headless()
 
-def write_installer_repair_launcher(launcher_path, installer_log):
-    launcher_content = "\n".join([
-        "@echo off",
-        "setlocal",
-        f"call {cmd_quote(INSTALLER_PATH)} < nul > {cmd_quote(installer_log)} 2>&1",
-        "set \"INSTALL_EXIT=%errorlevel%\"",
-        f"if exist {cmd_quote(REPAIR_SERVICE_RECOVERY_PATH)} call {cmd_quote(REPAIR_SERVICE_RECOVERY_PATH)} --headless >> {cmd_quote(installer_log)} 2>&1",
-        "exit /b %INSTALL_EXIT%",
-        ""
-    ])
-    with open(launcher_path, "w", encoding="gbk", errors="replace") as f:
-        f.write(launcher_content)
-
-def run_installer_with_recovery_repair():
+def run_installer_headless():
     if not os.path.exists(INSTALLER_PATH):
         logger.error("找不到安装脚本，无法自动修复后台服务: %s", INSTALLER_PATH)
         return False
 
-    logger.warning("后台服务未运行，准备通过上游安装脚本修复后台服务: installer=%s source=%s", INSTALLER_PATH, INSTALL_SOURCE_DIR)
+    logger.warning("后台服务未运行，准备以 headless 模式运行安装脚本: installer=%s source=%s", INSTALLER_PATH, INSTALL_SOURCE_DIR)
     installer_log = installer_log_path()
     os.makedirs(os.path.dirname(installer_log), exist_ok=True)
     try:
@@ -799,14 +786,18 @@ def run_installer_with_recovery_repair():
     except Exception:
         logger.exception("清空安装日志失败: %s", installer_log)
 
-    launcher_path = installer_launcher_path()
-    try:
-        write_installer_repair_launcher(launcher_path, installer_log)
-    except Exception:
-        logger.exception("写入安装修复启动器失败: %s", launcher_path)
-        return False
-
     if not is_admin_user():
+        launcher_path = installer_launcher_path()
+        launcher_content = "\n".join([
+            "@echo off",
+            f"set \"LECOO_INSTALL_SOURCE={INSTALL_SOURCE_DIR}\"",
+            f"call {cmd_quote(INSTALLER_PATH)} --headless > {cmd_quote(installer_log)} 2>&1",
+            "exit /b %errorlevel%",
+            ""
+        ])
+        with open(launcher_path, "w", encoding="gbk", errors="replace") as f:
+            f.write(launcher_content)
+
         params = f"/d /c {cmd_quote(launcher_path)}"
         logger.warning("当前 GUI 不是管理员，准备通过 UAC 拉起安装脚本: launcher=%s log=%s", launcher_path, installer_log)
         try:
@@ -844,12 +835,14 @@ def run_installer_with_recovery_repair():
         return False
 
     try:
+        env = os.environ.copy()
+        env["LECOO_INSTALL_SOURCE"] = INSTALL_SOURCE_DIR
         result = subprocess.run(
-            ["cmd.exe", "/d", "/c", "call", launcher_path],
+            ["cmd.exe", "/d", "/c", "call", INSTALLER_PATH, "--headless"],
             capture_output=True,
             text=True,
             errors="replace",
-            stdin=subprocess.DEVNULL,
+            env=env,
             timeout=120,
             creationflags=subprocess_creationflags()
         )
@@ -860,22 +853,14 @@ def run_installer_with_recovery_repair():
         logger.exception("运行安装脚本失败")
         return False
 
-    installer_output = read_tail(installer_log)
-    if installer_output.strip():
-        logger.info("安装脚本输出: %s", installer_output.strip())
-    elif result.stdout.strip():
-        logger.info("安装启动器输出: %s", result.stdout.strip())
+    if result.stdout.strip():
+        logger.info("安装脚本输出: %s", result.stdout.strip())
     if result.stderr.strip():
-        logger.warning("安装启动器错误输出: %s", result.stderr.strip())
+        logger.warning("安装脚本错误输出: %s", result.stderr.strip())
     if result.returncode != 0:
-        logger.warning("安装启动器返回失败: returncode=%s", result.returncode)
+        logger.warning("安装脚本返回失败: returncode=%s", result.returncode)
         return False
-    for _ in range(10):
-        if query_daemon_service_state() == "RUNNING":
-            return True
-        time.sleep(1)
-    logger.warning("安装启动器已结束，但后台服务未进入运行状态")
-    return False
+    return True
 
 def try_start_daemon_service():
     try:
@@ -1710,7 +1695,7 @@ class LecooControlGUI(QMainWindow):
 
         if state != "RUNNING":
             logger.warning("用户启动时发现后台服务未运行，准备运行安装脚本: state=%s", state)
-            if run_installer_with_recovery_repair():
+            if run_installer_headless():
                 self._daemon_ready = True
                 self.status_bar.showMessage("后台服务已修复并启动", 4000)
                 return

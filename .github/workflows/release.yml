@@ -1,0 +1,49 @@
+name: Build and publish 0.3.3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'core/**'
+      - 'scripts/**'
+      - 'release/**'
+      - '.github/workflows/release.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: lecoo-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    if: github.repository == 'grasscaograss/lecoo-pro14-control-center'
+    runs-on: windows-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    env:
+      LECOO_RUNTIME: ${{ runner.temp }}\lecoo-runtime
+      LECOO_RELEASE: ${{ runner.temp }}\lecoo-release
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        shell: pwsh
+        run: rustup toolchain install 1.94.0 --profile minimal
+      - name: Build and test the patched 0.3.3 core
+        shell: pwsh
+        run: ./scripts/build-core.ps1 -OutputDirectory $env:LECOO_RUNTIME
+      - name: Package the existing GUI with the patched runtime
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/release.py package --runtime $env:LECOO_RUNTIME --output $env:LECOO_RELEASE
+      - name: Publish and withdraw the superseded release through the API
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/release.py publish --output $env:LECOO_RELEASE

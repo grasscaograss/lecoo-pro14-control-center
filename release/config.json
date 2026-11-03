@@ -1,0 +1,18 @@
+{
+  "repository": "grasscaograss/lecoo-pro14-control-center",
+  "tag": "v0.3.3-ipcfix.1",
+  "name": "Lecoo Pro14 Control Center 0.3.3 IPC 修复版",
+  "archive": "lecoo-pro14-control-center-0.3.3-ipcfix.1-windows-x64.zip",
+  "upstream_commit": "dd850af1f15110deed00b9e3b7546b5fa8b3ea41",
+  "core_version": "0.3.3",
+  "interprocess_version": "2.4.2",
+  "rust_version": "1.94.0",
+  "gui_sha256": "3afb4277fc3b46b73eca75a41f56ebabb13470be5542f35573b38ea352b2dbfb",
+  "driver_sha256": "5f27ed4d5cd58a1ee23deeb802e09e73f3a1d884ce2135f6e827f67b171269e7",
+  "bootstrap": {
+    "tag": "StableV1.0",
+    "release_id": 325083078,
+    "asset": "lecoo-pro14-control-center.7z",
+    "sha256": "e858d23ae67b9e645ee0d8ec99c308b778e0f2d8ef7ad7c0c02564c6ee5ba16a"
+  }
+}

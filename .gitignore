@@ -6,6 +6,7 @@ dist/
 logs/
 
 config.json
+!/release/config.json
 *.log
 
 *.exe
