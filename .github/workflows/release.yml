@@ -25,8 +25,8 @@ jobs:
     permissions:
       contents: write
     env:
-      LECOO_RUNTIME: ${{ runner.temp }}\lecoo-runtime
-      LECOO_RELEASE: ${{ runner.temp }}\lecoo-release
+      LECOO_RUNTIME: ${{ github.workspace }}\dist\runtime
+      LECOO_RELEASE: ${{ github.workspace }}\dist\release
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
